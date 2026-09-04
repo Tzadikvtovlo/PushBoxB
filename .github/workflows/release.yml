@@ -1,0 +1,167 @@
+name: יצירת שחרור והורדת ZIP (Release ZIP)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_target:
+        description: 'בחר גרסה לייצור והורדה:'
+        required: true
+        type: choice
+        default: 'בטא 4.92 (Beta 4.92 - פיצ\'רים חדשים: שליחת SMS, לא-נקרא, תזכורות)'
+        options:
+          - 'בטא 4.92 (Beta 4.92 - פיצ\'רים חדשים: שליחת SMS, לא-נקרא, תזכורות)'
+          - 'בטא 4.65 (Beta 4.65 - שיפורי תשתית, מטמון ותיקוני באגים)'
+          - 'רגיל (Stable 4.6 - קבצי המאגר המקוריים)'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0 # חובה כדי להביא את היסטוריית התגיות
+
+      - name: Determine Version and Setup Package Info
+        id: prep
+        run: |
+          CHOICE="${{ github.event.inputs.release_target }}"
+          echo "Selected choice: $CHOICE"
+          
+          if [[ "$CHOICE" == *"4.92"* ]]; then
+            IS_BETA="true"
+            SOURCE_DIR="beta"
+            MANIFEST_PATH="beta/manifest.json"
+            BASE_VERSION=$(jq -r '.version' beta/manifest.json)
+            echo "Building Beta 4.92 release. Base version: $BASE_VERSION"
+          elif [[ "$CHOICE" == *"4.65"* ]]; then
+            IS_BETA="true"
+            SOURCE_DIR="beta-4.65"
+            MANIFEST_PATH="beta-4.65/manifest.json"
+            BASE_VERSION=$(jq -r '.version' beta-4.65/manifest.json)
+            echo "Building Beta 4.65 release. Base version: $BASE_VERSION"
+          else
+            IS_BETA="false"
+            SOURCE_DIR="."
+            MANIFEST_PATH="manifest.json"
+            BASE_VERSION=$(jq -r '.version' manifest.json)
+            echo "Building Stable 4.6 release. Base version: $BASE_VERSION"
+          fi
+          
+          if [ "$IS_BETA" = "true" ]; then
+            TAG_PREFIX="v${BASE_VERSION}-beta"
+            if git show-ref --tags "refs/tags/$TAG_PREFIX" --quiet; then
+              echo "Tag $TAG_PREFIX exists. Finding next available sub-version..."
+              SAFE_BASE=$(echo "$BASE_VERSION" | sed 's/\./\\./g')
+              LATEST_SUB=$(git tag | grep -E "^v${SAFE_BASE}\.[0-9]+-beta$" | sort -V | tail -n 1)
+
+              if [ -z "$LATEST_SUB" ]; then
+                FINAL_VERSION="${BASE_VERSION}.1"
+              else
+                SUB_NUM=$(echo "$LATEST_SUB" | sed 's/-beta$//' | awk -F. '{print $NF}')
+                NEXT_SUB=$((SUB_NUM + 1))
+                FINAL_VERSION="${BASE_VERSION}.${NEXT_SUB}"
+              fi
+            else
+              FINAL_VERSION="$BASE_VERSION"
+            fi
+            
+            FINAL_TAG="v${FINAL_VERSION}-beta"
+            RELEASE_NAME="PushBox v${FINAL_VERSION} (גרסת בטא)"
+            ZIP_NAME="PushBox-v${FINAL_VERSION}-Beta.zip"
+            PRERELEASE="true"
+          else
+            TAG_PREFIX="v${BASE_VERSION}"
+            if git show-ref --tags "refs/tags/$TAG_PREFIX" --quiet; then
+              echo "Tag $TAG_PREFIX exists. Finding next available sub-version..."
+              SAFE_BASE=$(echo "$BASE_VERSION" | sed 's/\./\\./g')
+              LATEST_SUB=$(git tag | grep -E "^v${SAFE_BASE}\.[0-9]+$" | sort -V | tail -n 1)
+
+              if [ -z "$LATEST_SUB" ]; then
+                FINAL_VERSION="${BASE_VERSION}.1"
+              else
+                SUB_NUM=$(echo "$LATEST_SUB" | awk -F. '{print $NF}')
+                NEXT_SUB=$((SUB_NUM + 1))
+                FINAL_VERSION="${BASE_VERSION}.${NEXT_SUB}"
+              fi
+            else
+              FINAL_VERSION="$BASE_VERSION"
+            fi
+            
+            FINAL_TAG="v${FINAL_VERSION}"
+            RELEASE_NAME="PushBox v${FINAL_VERSION} (גרסה רשמית)"
+            ZIP_NAME="PushBox-v${FINAL_VERSION}.zip"
+            PRERELEASE="false"
+          fi
+          
+          echo "IS_BETA=$IS_BETA" >> $GITHUB_OUTPUT
+          echo "SOURCE_DIR=$SOURCE_DIR" >> $GITHUB_OUTPUT
+          echo "MANIFEST_PATH=$MANIFEST_PATH" >> $GITHUB_OUTPUT
+          echo "FINAL_VERSION=$FINAL_VERSION" >> $GITHUB_OUTPUT
+          echo "FINAL_TAG=$FINAL_TAG" >> $GITHUB_OUTPUT
+          echo "RELEASE_NAME=$RELEASE_NAME" >> $GITHUB_OUTPUT
+          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_OUTPUT
+          echo "PRERELEASE=$PRERELEASE" >> $GITHUB_OUTPUT
+          
+          echo "Summary: Source=$SOURCE_DIR, Target=$FINAL_TAG, Zip=$ZIP_NAME, PreRelease=$PRERELEASE"
+
+      - name: Extract Release Notes
+        id: get_notes
+        run: |
+          MANIFEST_PATH="${{ steps.prep.outputs.MANIFEST_PATH }}"
+          COMMIT_MSG=$(git log -1 --pretty=format:"%B" -- "$MANIFEST_PATH")
+          
+          if [ -z "$COMMIT_MSG" ]; then
+            if [ "${{ steps.prep.outputs.IS_BETA }}" = "true" ]; then
+              COMMIT_MSG="שחרור גרסת בטא חדשה (${{ steps.prep.outputs.FINAL_TAG }})"
+            else
+              COMMIT_MSG="שחרור גרסה יציבה חדשה (${{ steps.prep.outputs.FINAL_TAG }})"
+            fi
+          fi
+
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          echo "RELEASE_NOTES<<$EOF" >> $GITHUB_ENV
+          echo "$COMMIT_MSG" >> $GITHUB_ENV
+          echo "$EOF" >> $GITHUB_ENV
+
+      - name: Create ZIP Archive
+        run: |
+          ZIP_NAME="${{ steps.prep.outputs.ZIP_NAME }}"
+          SOURCE_DIR="${{ steps.prep.outputs.SOURCE_DIR }}"
+          IS_BETA="${{ steps.prep.outputs.IS_BETA }}"
+          
+          if [ "$IS_BETA" = "true" ]; then
+            echo "Packaging $SOURCE_DIR folder contents into $ZIP_NAME..."
+            cd "$SOURCE_DIR"
+            zip -r "../$ZIP_NAME" . -x "*.git*"
+            cd ..
+          else
+            echo "Packaging stable files into $ZIP_NAME..."
+            zip -r "$ZIP_NAME" manifest.json popup.html popup.js options.html options.js filters.html filters.js background.js offscreen.html offscreen.js icon16.png icon48.png icon128.png
+          fi
+          
+          ls -la "$ZIP_NAME"
+
+      # שמירת קובץ ה-ZIP ב-Artifacts של ה-Action (הורדה ישירה בלחיצה אחת מתוך דף ה-Actions)
+      - name: Upload ZIP as Action Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.prep.outputs.ZIP_NAME }}
+          path: ${{ steps.prep.outputs.ZIP_NAME }}
+          retention-days: 90
+
+      # יצירת ה-Release ב-GitHub עם קובץ ה-ZIP מצורף תחת תווית בטא (Pre-release)
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2.1.0
+        with:
+          tag_name: "${{ steps.prep.outputs.FINAL_TAG }}"
+          name: "${{ steps.prep.outputs.RELEASE_NAME }}"
+          body: "${{ env.RELEASE_NOTES }}"
+          files: "${{ steps.prep.outputs.ZIP_NAME }}"
+          prerelease: ${{ steps.prep.outputs.PRERELEASE == 'true' }}
+          make_latest: ${{ steps.prep.outputs.IS_BETA != 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
