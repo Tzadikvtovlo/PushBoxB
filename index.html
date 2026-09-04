@@ -440,18 +440,18 @@
         <div style="display: flex; flex-direction: column; gap: 10px;">
           <!-- כפתורי הורדה ישירה לתיקיית ההורדות בדפדפן -->
           <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px;">
-            <button id="btnDownloadBeta492Zip" class="btn btn-primary">
+            <a id="btnDownloadBeta492Zip" href="/api/download-zip?type=beta492" download="PushBox-v4.92-Beta.zip" class="btn btn-primary" style="text-decoration: none; justify-content: center;">
               <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
               הורד ZIP בטא 4.92 (פיצ'רים)
-            </button>
-            <button id="btnDownloadBeta465Zip" class="btn btn-primary" style="background: #6b21a8; border-color: #6b21a8;">
+            </a>
+            <a id="btnDownloadBeta465Zip" href="/api/download-zip?type=beta465" download="PushBox-v4.65-Beta.zip" class="btn btn-primary" style="background: #6b21a8; border-color: #6b21a8; text-decoration: none; justify-content: center;">
               <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
               הורד ZIP בטא 4.65 (תשתית)
-            </button>
-            <button id="btnDownloadStableZip" class="btn">
+            </a>
+            <a id="btnDownloadStableZip" href="/api/download-zip?type=stable" download="PushBox-v4.6.zip" class="btn" style="text-decoration: none; justify-content: center;">
               <svg class="icon-svg" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
               הורד ZIP יציב 4.6
-            </button>
+            </a>
           </div>
 
           <div style="border-top: 1px solid var(--border); padding-top: 10px; font-size: 13px;">
@@ -677,15 +677,24 @@
     }
 
     document.getElementById('btnDownloadBeta492Zip')?.addEventListener('click', () => {
-      downloadExtensionZip('beta492');
+      const statusEl = document.getElementById('zipStatus');
+      statusEl.style.display = 'block';
+      statusEl.textContent = 'מוריד את PushBox-v4.92-Beta.zip ישירות לתיקיית ההורדות...';
+      setTimeout(() => { statusEl.style.display = 'none'; }, 4000);
     });
 
     document.getElementById('btnDownloadBeta465Zip')?.addEventListener('click', () => {
-      downloadExtensionZip('beta465');
+      const statusEl = document.getElementById('zipStatus');
+      statusEl.style.display = 'block';
+      statusEl.textContent = 'מוריד את PushBox-v4.65-Beta.zip ישירות לתיקיית ההורדות...';
+      setTimeout(() => { statusEl.style.display = 'none'; }, 4000);
     });
 
     document.getElementById('btnDownloadStableZip')?.addEventListener('click', () => {
-      downloadExtensionZip('stable');
+      const statusEl = document.getElementById('zipStatus');
+      statusEl.style.display = 'block';
+      statusEl.textContent = 'מוריד את PushBox-v4.6.zip ישירות לתיקיית ההורדות...';
+      setTimeout(() => { statusEl.style.display = 'none'; }, 4000);
     });
   </script>
 </body>
